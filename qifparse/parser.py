@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 import six
+import re
 from datetime import datetime
 from decimal import Decimal
+from qifparse import DATETIME_FORMAT, DEFAULT_DATETIME_FORMAT
 from qifparse.qif import (
     Transaction,
     MemorizedTransaction,
@@ -30,7 +32,7 @@ class QifParserException(Exception):
 class QifParser(object):
 
     @classmethod
-    def parse(cls_, file_handle, date_format=None):
+    def parse(cls_, file_handle, date_format=DEFAULT_DATETIME_FORMAT):
         if isinstance(file_handle, type('')):
             raise RuntimeError(
                 six.u("parse() takes in a file handle, not a string"))
@@ -73,7 +75,7 @@ class QifParser(object):
                 raise QifParserException('Header not reconized')
             # if no header is recognized then
             # we use the previous one
-            item = parsers[last_type](chunk)
+            item = parsers[last_type](chunk, date_format)
             if last_type == 'account':
                 qif_obj.add_account(item)
                 last_account = item
@@ -92,7 +94,7 @@ class QifParser(object):
         return qif_obj
 
     @classmethod
-    def parseClass(cls_, chunk):
+    def parseClass(cls_, chunk, date_format=DEFAULT_DATETIME_FORMAT):
         """
         """
         curItem = Class()
@@ -108,7 +110,7 @@ class QifParser(object):
         return curItem
 
     @classmethod
-    def parseCategory(cls_, chunk):
+    def parseCategory(cls_, chunk, date_format=DEFAULT_DATETIME_FORMAT):
         """
         """
         curItem = Category()
@@ -134,7 +136,7 @@ class QifParser(object):
         return curItem
 
     @classmethod
-    def parseAccount(cls_, chunk):
+    def parseAccount(cls_, chunk, date_format=DEFAULT_DATETIME_FORMAT):
         """
         """
         curItem = Account()
@@ -159,13 +161,13 @@ class QifParser(object):
         return curItem
 
     @classmethod
-    def parseMemorizedTransaction(cls_, chunk, date_format=None):
+    def parseMemorizedTransaction(cls_, chunk, date_format=DEFAULT_DATETIME_FORMAT):
         """
         """
 
         curItem = MemorizedTransaction()
         if date_format:
-            curItem.date_format = date_format
+            curItem.date_format = DATETIME_FORMAT[date_format]
         lines = chunk.split('\n')
         for line in lines:
             if not len(line) or line[0] == '\n' or \
@@ -216,13 +218,13 @@ class QifParser(object):
         return curItem
 
     @classmethod
-    def parseTransaction(cls_, chunk, date_format=None):
+    def parseTransaction(cls_, chunk, date_format=DEFAULT_DATETIME_FORMAT):
         """
         """
 
         curItem = Transaction()
         if date_format:
-            curItem.date_format = date_format
+            curItem.date_format = DATETIME_FORMAT[date_format]
         lines = chunk.split('\n')
         for line in lines:
             if not len(line) or line[0] == '\n' or line.startswith('!Type'):
@@ -288,13 +290,13 @@ class QifParser(object):
         return curItem
 
     @classmethod
-    def parseInvestment(cls_, chunk, date_format=None):
+    def parseInvestment(cls_, chunk, date_format=DEFAULT_DATETIME_FORMAT):
         """
         """
 
         curItem = Investment()
         if date_format:
-            curItem.date_format = date_format
+            curItem.date_format = DATETIME_FORMAT[date_format]
         lines = chunk.split('\n')
         for line in lines:
             if not len(line) or line[0] == '\n' or line.startswith('!Type'):
@@ -326,27 +328,43 @@ class QifParser(object):
         return curItem
 
     @classmethod
-    def parseQifDateTime(cls_, qdate):
+    def parseQifDateTime(cls_, qdate, date_format=DEFAULT_DATETIME_FORMAT):
         """ convert from QIF time format to ISO date string
 
         QIF is like "7/ 9/98"  "9/ 7/99" or "10/10/99" or "10/10'01" for y2k
              or, it seems (citibankdownload 20002) like "01/22/2002"
              or, (Paypal 2011) like "3/2/2011".
         ISO is like   YYYY-MM-DD  I think @@check
+
+        To simplify the conversion, the date will be split in three tokens
+        with / and ' as separators. The tokens' meaning (month, day or year)
+        is defined by the provided date format.
+        Token are converted to integers and then back to string to make sure that 
+        we have the expected format (leading 0 ...)
         """
-        if qdate[1] == "/":
-            qdate = "0" + qdate   # Extend month to 2 digits
-        if qdate[4] == "/":
-            qdate = qdate[:3]+"0" + qdate[3:]   # Extend month to 2 digits
-        for i in range(len(qdate)):
-            if qdate[i] == " ":
-                qdate = qdate[:i] + "0" + qdate[i+1:]
-        if len(qdate) == 10:  # new form with YYYY date
-            iso_date = qdate[6:10] + "-" + qdate[3:5] + "-" + qdate[0:2]
-            return datetime.strptime(iso_date, '%Y-%m-%d')
-        if qdate[5] == "'":
-            C = "20"
-        else:
-            C = "19"
-        iso_date = C + qdate[6:8] + "-" + qdate[3:5] + "-" + qdate[0:2]
+        date_tokens = re.split('/|\'', qdate)
+        if date_format == 'YMD':
+            date_year = date_tokens[0]
+            date_month = date_tokens[1]
+            date_day = date_tokens[2]
+        elif date_format == 'MDY':
+            date_year = date_tokens[2]
+            date_month = date_tokens[0]
+            date_day = date_tokens[1]
+        elif date_format == 'DMY':
+            date_year = date_tokens[2]
+            date_month = date_tokens[1]
+            date_day = date_tokens[0]
+            
+        if len(date_year) == 2:
+            # Assume that if two digits year is over 80, then we are before 
+            # 2000 (won't work any more in 2081 and for transactions before 1980)
+            if int(date_year) > 80:
+                    date_year = '19' + date_year
+            else:
+                    date_year = '20' + date_year                    
+
+        iso_date = '{:4d}'.format(int(date_year)) + "-" + \
+                   '{:0>2d}'.format(int(date_month)) + "-" + \
+                   '{:0>2d}'.format(int(date_day)) 
         return datetime.strptime(iso_date, '%Y-%m-%d')

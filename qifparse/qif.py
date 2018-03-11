@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import six
 from datetime import datetime
-from qifparse import DEFAULT_DATETIME_FORMAT
+from qifparse import DATETIME_FORMAT, DEFAULT_DATETIME_FORMAT
 
 ACCOUNT_TYPES = [
     'Cash',
@@ -141,8 +141,8 @@ class BaseEntry(object):
     _fields = []
     _sub_entry = False
 
-    def __init__(self, **kwargs):
-        self.date_format = DEFAULT_DATETIME_FORMAT
+    def __init__(self, **kwargs):     
+        self.date_format = DATETIME_FORMAT[DEFAULT_DATETIME_FORMAT]
         for field in self._fields:
             val = kwargs.get(field.name, field.default)
             setattr(self, field.name, val)
