@@ -364,7 +364,7 @@ class QifParser(object):
             else:
                     date_year = '20' + date_year                    
 
-        iso_date = '{:4d}'.format(int(date_year)) + "-" + \
-                   '{:0>2d}'.format(int(date_month)) + "-" + \
-                   '{:0>2d}'.format(int(date_day)) 
+        iso_date = '{0:4d}'.format(int(date_year)) + "-" + \
+                   '{0:0>2d}'.format(int(date_month)) + "-" + \
+                   '{0:0>2d}'.format(int(date_day)) 
         return datetime.strptime(iso_date, '%Y-%m-%d')
